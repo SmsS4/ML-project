@@ -27,10 +27,9 @@ class Download(mlflow.pyfunc.PythonModel):
 
     def set_cache(self) -> pd.DataFrame:
         print('set cache')
-        with open(self.cache_path, "w") as f:
-            df = self.get_df()
-            df.to_csv(self.cache_path)
-            return df
+        df = self.get_df()
+        df.to_csv(self.cache_path)
+        return df
 
     def add_flag(self, df: pd.DataFrame) -> pd.DataFrame:
         v = int(self.val_split * len(df))
@@ -41,7 +40,7 @@ class Download(mlflow.pyfunc.PythonModel):
     def get_df(self) -> pd.DataFrame:
         print('get df')
         url = 'https://drive.google.com/uc?id=' + self.url.split('/')[-2]
-        return self.add_flag(pd.read_csv(url)[:100]) #TODO
+        return self.add_flag(pd.read_csv(url))[:100] #TODO
 
     def predict(self, context, model_input) -> pd.DataFrame:
         print('predict')

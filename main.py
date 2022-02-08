@@ -1,4 +1,5 @@
 import json
+import os
 from pprint import pprint
 from typing import Optional
 
@@ -13,6 +14,7 @@ class Routes:
     CONVERT = "http://127.0.0.1:1235"
     CLEAN = "http://127.0.0.1:1236"
     PCA = "http://127.0.0.1:1237"
+    MODEL = "http://127.0.0.1:1238"
 
 
 def df_to_json(df: pd.DataFrame) -> dict:
@@ -58,10 +60,6 @@ class Stage:
         Stage.CALLED += 1
         print(f'Stage {self.name} called {Stage.CALLED}/{Stage.TOTAL}')
         print(f"{self.route}/invocations")
-        print(data.columns)
-        if 'FLAG' in data:
-            print(data['FLAG'])
-
         result = requests.post(
             f"{self.route}/invocations",
             headers={
@@ -75,33 +73,33 @@ class Stage:
         return df
 
 
-class ModelStage(Stage):
-    def __init__(
-            self,
-            name: str,
-    ):
-        super().__init__(name, '')
-
-    def __call__(self, data: pd.DataFrame):
-        print('model!')
-        print(data)
-
-
 pre = Stage('convert', Routes.CONVERT).set_next(
     Stage('clean_data', Routes.CLEAN).set_next(
         Stage('pca', Routes.PCA)
     )
 )
+download_and_pre = Stage('download', Routes.DOWNLOAD).set_next(pre)
+model = Stage('model', Routes.MODEL)
+train_pipeline = lambda: model(download_and_pre(pd.DataFrame()))
+
+test_pipeline = lambda data: model(download_and_pre(data))
+
+
+class CallRealModel(mlflow.pyfunc.PythonModel):
+    def predict(self, context, model_input):
+        return test_pipeline(model_input)
 
 
 def main():
-    model = ModelStage('model')
     with mlflow.start_run() as run:
         print('Training...')
-        stage_download = Stage('download', Routes.DOWNLOAD).set_next(pre)
-        data = stage_download(pd.DataFrame())
-        model(data)
+        caller_model = CallRealModel()
+        train_pipeline()
+        model_path = os.path.join('models', "pipeline-" + run.info.run_id)
+        mlflow.pyfunc.save_model(path=model_path, python_model=caller_model)
+        print('Pipeline saved in', model_path)
 
 
 if __name__ == "__main__":
+
     main()

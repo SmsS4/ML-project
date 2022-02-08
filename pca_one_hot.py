@@ -92,6 +92,7 @@ class Transform(mlflow.pyfunc.PythonModel):
         print('transforming')
         data = df.copy()
         for cat, pca_n in self.categorcals_to_numerics:
+            print(cat, pca_n)
             if pca_n == 0:
                 del data[cat]
                 continue

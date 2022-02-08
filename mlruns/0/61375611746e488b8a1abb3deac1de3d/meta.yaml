@@ -1,0 +1,15 @@
+artifact_uri: ./mlruns/0/61375611746e488b8a1abb3deac1de3d/artifacts
+end_time: 1644343503973
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+name: ''
+run_id: 61375611746e488b8a1abb3deac1de3d
+run_uuid: 61375611746e488b8a1abb3deac1de3d
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1644343503509
+status: 4
+tags: []
+user_id: smss

@@ -56,26 +56,27 @@ class MLP_Criteo(nn.Module):
         super().__init__()
         listLayers = [
             nn.Linear(41, 64),
-            nn.ReLU()
-        ]
-        for i in range(50):
-            listLayers.append(nn.Dropout(0.1))
+            nn.BatchNorm1d(64),
+            nn.ReLU()]
+        for i in range(7):
             listLayers.append(nn.Linear(64, 64))
+            listLayers.append(nn.BatchNorm1d(64))
             listLayers.append(nn.ReLU())
-
-        listLayers.append(nn.Linear(64, 1))
+        listLayers.append(nn.Linear(64, 10))
+        listLayers.append(nn.BatchNorm1d(10))
+        listLayers.append(nn.ReLU())
+        listLayers.append(nn.Linear(10, 1))
         listLayers.append(nn.Sigmoid())
         self.layers = nn.Sequential(
             *listLayers
         )
-
     def forward(self, x):
         x = self.layers(x)
         return x
 
 
 class Model(mlflow.pyfunc.PythonModel):
-    def __init__(self, add_one: int = 10, batch_size: int = 64):
+    def __init__(self, add_one: int = 10, batch_size: int = 256):
         self.add_one = add_one
         self.batch_size = batch_size
         self.model = None
@@ -98,11 +99,12 @@ class Model(mlflow.pyfunc.PythonModel):
             batch_size=self.batch_size,
             shuffle=True,
         )
-        model = MLP_Criteo()
-        self.model = model
+        model2 = MLP_Criteo()
+        self.model = model2
+        model2 = MLP_Criteo()
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        model = model.to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
+        model2 = model2.to(device)
+        optimizer = torch.optim.SGD(model2.parameters(), lr=0.1, momentum=0.8)
         loss_fn = nn.BCELoss()
         mean_train_losses = []
         mean_valid_losses = []
@@ -112,7 +114,7 @@ class Model(mlflow.pyfunc.PythonModel):
         epochs = 100
 
         for epoch in range(epochs):
-            model.train()
+            model2.train()
 
             train_losses = []
             valid_losses = []
@@ -120,46 +122,33 @@ class Model(mlflow.pyfunc.PythonModel):
             valid_fScores = []
             for i, (datas, labels) in enumerate(train_loader):
                 datas, labels = datas.to(device), labels.to(device)
-
-                outputs = model(datas)
-
+                outputs = model2(datas)
                 loss = loss_fn(outputs.to(torch.float32), labels.unsqueeze(1).to(torch.float32))
-
-                _, predicted = torch.max(outputs.data, 1)
-
+                predicted = torch.round(outputs)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-                train_fScores.append(f1_score(predicted, labels))
                 train_losses.append(loss.item())
+                fScore = f1_score(predicted.detach().numpy(), labels)
+                train_fScores.append(fScore)
 
-            model.eval()
-            correct = 0
-            total = 0
+            model2.eval()
 
             with torch.no_grad():
                 for i, (datas, labels) in enumerate(valid_loader):
                     datas, labels = datas.to(device), labels.to(device)
-
-                    outputs = model(datas)
-
+                    outputs = model2(datas)
                     loss = loss_fn(outputs.to(torch.float32), labels.unsqueeze(1).to(torch.float32))
-
                     valid_losses.append(loss.item())
-
-                    _, predicted = torch.max(outputs.data, 1)
-                    valid_fScores.append(f1_score(predicted, labels))
-                    total += sum(predicted > 0)
+                    predicted = torch.round(outputs)
+                    valid_fScores.append(f1_score(predicted.detach().numpy(), labels))
 
             mean_train_losses.append(np.mean(train_losses))
             mean_valid_losses.append(np.mean(valid_losses))
-            mean_valid_fScores.append(valid_fScores)
-            mean_train_fScores.append(train_fScores)
-            print(total)
+
             print(
-                'epoch : {}, train loss : {:.4f}, train f1score : {:.4f}, valid loss : {:.4f}, valid f1score : {:.4f}%' \
-                .format(epoch + 1, np.mean(train_losses), np.mean(mean_train_fScores), np.mean(valid_losses),
-                        np.mean(mean_valid_fScores)))
+                'epoch : {}, train loss : {:.4f}, train f1score : {:.4f}' \
+                    .format(epoch + 1, np.mean(train_losses), np.mean(train_fScores)))
     def predict(self, context, model_input:pd.DataFrame):
         if (model_input['FLAG']==0).sum():
             self.fit(
